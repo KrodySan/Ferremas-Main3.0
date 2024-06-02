@@ -11,6 +11,7 @@ urlpatterns = [
     path('tienda/', tienda, name="tienda"),
     path('cerrar_sesion/', cerrar_sesion, name="CERRAR_SESSION"),
     path('perfil/', perfil, name='perfil'),
+    path('bodeguero/', views.bodeguero_view, name='bodeguero'),
 
     # Carrito
     path('carrito/', carrito, name="carrito"),

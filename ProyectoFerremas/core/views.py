@@ -16,9 +16,11 @@ from transbank.error.transbank_error import TransbankError
 from django.http import HttpResponseBadRequest
 from django.http import HttpResponse
 from .models import Boleta, DetalleBoleta
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 import logging
 from django.contrib import messages
+from . import views
+from django.template import engines
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +56,37 @@ def cerrar_sesion(request):
     logout(request)
     return redirect(to="index")
 
+def bodeguero_view(request):
+    # Obtén los pedidos aprobados aquí para pasarlos al contexto de la plantilla
+    pedidos_aprobados = Boleta.objects.filter(detalleboleta__producto__isnull=False).distinct()
+    context = {
+        'pedidos_aprobados': pedidos_aprobados,
+        'user': request.user  # Añade el usuario al contexto
+    }
+    return render(request, 'core/bodeguero.html', context)
+
+
 def producto (request):
     return render(request,'core/producto.html')
 
 def registro (request):
-    return render(request,'core/registro.html')
+    if request.method == 'POST':
+        form = RegistroForm(request.POST)
+        if form.is_valid():
+            try:
+                user = form.save()
+                login_aut(request, user)
+                messages.success(request, 'Registro exitoso. Bienvenido!')
+                logger.info(f"Usuario {user.username} registrado y autenticado exitosamente")
+                return redirect('index')
+            except Exception as e:
+                logger.error(f"Error al registrar el usuario: {e}")
+                form.add_error(None, 'Ocurrió un error al crear el usuario. Por favor, inténtelo de nuevo.')
+        else:
+            logger.warning(f"Formulario de registro no válido: {form.errors.as_json()}")
+    else:
+        form = RegistroForm()
+    return render(request, 'core/registro.html', {'form': form})
 
 def tienda (request):
     productos = Producto.objects.all()
@@ -207,10 +235,10 @@ def perfil(request):
 # Agregar vistas para la integración de pagos con Transbank
 def webpay_plus_commit(request):
     if request.method == 'GET':
-        token = request.GET.get("TBK_TOKEN")
+        token = request.GET.get("token_ws")
         if token is None:
-            return HttpResponseBadRequest("El parámetro 'TBK_TOKEN' es requerido en la URL.")
-
+            return HttpResponseBadRequest("El parámetro 'token_ws' es requerido en la URL.")
+        
         try:
             response = Transaction().commit(token=token)
             status = response.get('status', 'UNKNOWN')
@@ -238,16 +266,37 @@ def webpay_plus_commit(request):
 
                 carrito.carritoitem_set.all().delete()
 
-                context = {'token': token, 'response': response, 'productos': productos, 'total': precio_total}
-                return render(request, 'commit.html', context)
+                context = {
+                    'token': token,
+                    'response': response,
+                    'productos': productos,
+                    'total': precio_total,
+                    'success': True
+                }
+                
+                # Imprimir rutas de búsqueda de plantillas
+                template_dirs = engines['django'].engine.dirs
+                app_template_dirs = [template_dir for loader in engines['django'].engine.template_loaders if hasattr(loader, 'get_template_sources') for template_dir in loader.get_template_sources('')]
+                print(f"Template dirs: {template_dirs}")
+                print(f"App template dirs: {app_template_dirs}")
+
+                return render(request, 'core/commit.html', context)
             else:
-                return render(request, 'commit.html', {'token': token, 'response': response, 'error': f"Estado de la transacción: {status}"})
+                return render(request, 'core/commit.html', {
+                    'token': token,
+                    'response': response,
+                    'error': f"Estado de la transacción: {status}",
+                    'success': False
+                })
         
         except TransbankError as e:
             if "422" in str(e):  # Verifica si el error contiene el código 422
                 return redirect('carrito')  # Redirecciona al carrito de compras
             else:
-                return render(request, 'commit.html', {'error': f"Error en la transacción: {str(e)}"})
+                return render(request, 'core/commit.html', {
+                    'error': f"Error en la transacción: {str(e)}",
+                    'success': False
+                })
 
     elif request.method == 'POST':
         action = request.POST.get("action")
@@ -258,7 +307,7 @@ def webpay_plus_commit(request):
         
         token = request.POST.get("token_ws")
         response = {"error": "Transacción con errores"}
-        return render(request, 'commit.html', {'token': token, 'response': response})
+        return render(request, 'core/commit.html', {'token': token, 'response': response})
 
 def generar_boleta(request):
     if request.method == 'GET':

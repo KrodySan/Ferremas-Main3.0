@@ -6,10 +6,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Registro</title>
-    {% block principal %}
     <link rel="stylesheet" href="{% static 'core/css/registro.css' %}">
 </head>
 <body>
+    {% block principal %}
     <div class="container">
         <h1>Registro</h1>
         {% if messages %}
@@ -22,6 +22,11 @@
         <form method="post" class="registration-form">
             {% csrf_token %}
             {{ form.as_p }}
+            <div class="form-group">
+                <label for="bodeguero">
+                    <input type="checkbox" id="bodeguero" name="bodeguero"> Solicitar ser bodeguero
+                </label>
+            </div>
             {% if form.errors %}
                 <div class="errors">
                     <ul>
@@ -39,6 +44,6 @@
             <button type="submit" class="register-button">Registrarse</button>
         </form>
     </div>
+    {% endblock principal %}
 </body>
 </html>
-{% endblock principal %}

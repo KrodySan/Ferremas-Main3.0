@@ -57,11 +57,10 @@ def cerrar_sesion(request):
     return redirect(to="index")
 
 def bodeguero_view(request):
-    # Obtén los pedidos aprobados aquí para pasarlos al contexto de la plantilla
     pedidos_aprobados = Boleta.objects.filter(detalleboleta__producto__isnull=False).distinct()
     context = {
         'pedidos_aprobados': pedidos_aprobados,
-        'user': request.user  # Añade el usuario al contexto
+        'user': request.user 
     }
     return render(request, 'core/bodeguero.html', context)
 
@@ -273,12 +272,6 @@ def webpay_plus_commit(request):
                     'total': precio_total,
                     'success': True
                 }
-                
-                # Imprimir rutas de búsqueda de plantillas
-                template_dirs = engines['django'].engine.dirs
-                app_template_dirs = [template_dir for loader in engines['django'].engine.template_loaders if hasattr(loader, 'get_template_sources') for template_dir in loader.get_template_sources('')]
-                print(f"Template dirs: {template_dirs}")
-                print(f"App template dirs: {app_template_dirs}")
 
                 return render(request, 'core/commit.html', context)
             else:
@@ -305,6 +298,9 @@ def webpay_plus_commit(request):
             carrito.carritoitem_set.all().delete()
             return redirect('carrito')
         
+        if action == 'confirm':
+            return redirect('index')  # Redirecciona a la página de inicio después de confirmar el pago
+
         token = request.POST.get("token_ws")
         response = {"error": "Transacción con errores"}
         return render(request, 'core/commit.html', {'token': token, 'response': response})

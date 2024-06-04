@@ -7,12 +7,11 @@
 <link rel="stylesheet" href="{% static 'core/css/banner.css' %}">
 
 <style>
-    /* Estilos adicionales para la página del bodeguero */
     body {
         background-color: #f4f4f4;
     }
 
-    .container-bodeguero {
+    .container-contador {
         background-color: #fff;
         border-radius: 10px;
         padding: 20px;
@@ -68,7 +67,6 @@
         max-width: 500px;
     }
 
-    /* Integración de tu CSS */
     .navbar {
         background-color: rgb(31, 31, 190);
     }
@@ -170,19 +168,19 @@
     }
 </style>
 
-<div class="container-bodeguero">
+<div class="container-contador">
     <!-- Cabecera de la página -->
     <div class="d-flex align-items-center header mb-4">
         <img src="https://via.placeholder.com/100" alt="Imagen del usuario" width="100" height="100">
         <div class="user-info">
             <h1>{{ user.first_name }} {{ user.last_name }}</h1>
-            <p>Bodeguero</p>
+            <p>Contador</p>
             <p>ID: {{ user.id }}</p>
         </div>
     </div>
 
-    <!-- Otras secciones del bodeguero -->
-    <h2>Pedidos Aprobados</h2>
+    <!-- Otras secciones del contador -->
+    <h2>Reporte de Compras</h2>
     <table class="table">
         <thead>
             <tr>
@@ -193,14 +191,14 @@
             </tr>
         </thead>
         <tbody>
-            {% for pedido in pedidos_aprobados %}
+            {% for boleta in boletas %}
             <tr>
-                <td>{{ pedido.id }}</td>
-                <td>{{ pedido.fecha }}</td>
-                <td>{{ pedido.total }}</td>
+                <td>{{ boleta.id }}</td>
+                <td>{{ boleta.fecha }}</td>
+                <td>{{ boleta.total }}</td>
                 <td>
                     <ul>
-                        {% for detalle in pedido.detalleboleta_set.all %}
+                        {% for detalle in boleta.detalleboleta_set.all %}
                         <li>{{ detalle.producto.nombre }} - Cantidad: {{ detalle.cantidad }} - Subtotal: {{ detalle.subtotal }}</li>
                         {% endfor %}
                     </ul>
@@ -210,7 +208,9 @@
         </tbody>
     </table>
     <!-- Botón para generar PDF -->
-    <a href="{% url 'generar_pdf' %}" class="btn btn-primary">Generar PDF de Compras</a>
+    <form method="get">
+        <button type="submit" name="generar_pdf" class="btn btn-primary">Generar PDF de Compras</button>
+    </form>
 </div>
 
 {% endblock principal %}

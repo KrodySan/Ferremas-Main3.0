@@ -1,33 +1,37 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
-from .models import Producto, Carrito, CarritoItem
+from .models import Producto, Carrito, CarritoItem, Boleta, DetalleBoleta
 import locale
 import requests
 from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login as login_aut
 from .form import LoginForm, RegistroForm
-from .form import LoginForm, RegistroForm
 from django.db.models import Q
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth import logout,authenticate,login as login_aut
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth import logout, authenticate, login as login_aut
 import random
 from transbank.webpay.webpay_plus.transaction import Transaction
 from transbank.error.transbank_error import TransbankError
 from django.http import HttpResponseBadRequest
 from django.http import HttpResponse
-from .models import Boleta, DetalleBoleta
 from django.contrib.auth.models import User, Group
 import logging
 from django.contrib import messages
-from . import views
 from django.template import engines
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 logger = logging.getLogger(__name__)
 
+def grupo_bodeguero(user):
+    return user.groups.filter(name='Bodeguero').exists()
 
+def grupo_contador(user):
+    return user.groups.filter(name='Contador').exists()
 
+def grupo_trabajadores(user):
+    return user.groups.filter(name='Trabajadores').exists()
 
-# Create your views here.
 def index(request):
     return render(request, 'core/index.html', {'user': request.user})
 
@@ -56,6 +60,8 @@ def cerrar_sesion(request):
     logout(request)
     return redirect(to="index")
 
+@login_required
+@user_passes_test(grupo_bodeguero)
 def bodeguero_view(request):
     pedidos_aprobados = Boleta.objects.filter(detalleboleta__producto__isnull=False).distinct()
     context = {
@@ -64,35 +70,47 @@ def bodeguero_view(request):
     }
     return render(request, 'core/bodeguero.html', context)
 
+def producto(request):
+    return render(request, 'core/producto.html')
 
-def producto (request):
-    return render(request,'core/producto.html')
-
-def registro (request):
+def registro(request):
     if request.method == 'POST':
         form = RegistroForm(request.POST)
         if form.is_valid():
             try:
                 user = form.save()
+                user_type = form.cleaned_data['user_type']
+
+                # Verificar si los grupos existen
+                clientes_group, created = Group.objects.get_or_create(name='Clientes')
+                trabajadores_group, created = Group.objects.get_or_create(name='Trabajadores')
+
+                if user_type == 'cliente':
+                    clientes_group.user_set.add(user)
+                elif user_type == 'trabajador':
+                    trabajadores_group.user_set.add(user)
+
                 login_aut(request, user)
                 messages.success(request, 'Registro exitoso. Bienvenido!')
                 logger.info(f"Usuario {user.username} registrado y autenticado exitosamente")
                 return redirect('index')
             except Exception as e:
-                logger.error(f"Error al registrar el usuario: {e}")
-                form.add_error(None, 'Ocurrió un error al crear el usuario. Por favor, inténtelo de nuevo.')
+                # Capturar más detalles del error
+                error_message = f"Error al registrar el usuario: {e}"
+                logger.error(error_message)
+                form.add_error(None, error_message)
         else:
             logger.warning(f"Formulario de registro no válido: {form.errors.as_json()}")
     else:
         form = RegistroForm()
     return render(request, 'core/registro.html', {'form': form})
-
-def tienda (request):
+    
+def tienda(request):
     productos = Producto.objects.all()
     ctx = {
-        "productos" : productos
+        "productos": productos
     }
-    return render(request,'core/tienda.html', ctx)
+    return render(request, 'core/tienda.html', ctx)
 
 # Carrito
 def carrito(request):
@@ -112,12 +130,12 @@ def carrito(request):
         'items_carrito': items_carrito,
         'total': total,
         'total_formato': total_formateado,
-        'sub_total':sub_total_items
-        }
+        'sub_total': sub_total_items
+    }
     return render(request, 'core/carrito.html', ctx)
 
-# METODOS DEL CARRITO
-#@login_required(login_url='/login/')
+# Métodos del Carrito
+@login_required(login_url='/login/')
 def agregar_al_carrito(request, id_producto):
     producto = Producto.objects.get(pk=id_producto)
     carrito = Carrito.objects.get_or_create(usuario=request.user)[0]
@@ -133,27 +151,26 @@ def agregar_al_carrito(request, id_producto):
         
     return redirect('tienda')
 
-#@login_required(login_url='/login/')
+@login_required(login_url='/login/')
 def eliminar_del_carrito(request, id_item):
     item = CarritoItem.objects.get(pk=id_item)
     item.delete()
     return redirect('carrito')
 
-#@login_required(login_url='/login/')
+@login_required(login_url='/login/')
 def vaciar_carrito(request):
     carrito = Carrito.objects.get(usuario=request.user)
     carrito.carritoitem_set.all().delete()
     return redirect('carrito')
 
-# MAS METODOS
-#@login_required(login_url='/login/')
+@login_required(login_url='/login/')
 def aumentar_cantidad(request, id_item):
     item = get_object_or_404(CarritoItem, pk=id_item)
     item.cantidad += 1
     item.save()
     return redirect('carrito')
 
-#@login_required(login_url='/login/')
+@login_required(login_url='/login/')
 def disminuir_cantidad(request, id_item):
     item = get_object_or_404(CarritoItem, pk=id_item)
     if item.cantidad > 1:
@@ -163,8 +180,7 @@ def disminuir_cantidad(request, id_item):
         item.delete()
     return redirect('carrito')
 
- 
-#miindicador
+# Indicadores
 def indicadores_view(request):
     url = 'https://mindicador.cl/api'
     try:
@@ -182,56 +198,11 @@ def indicadores_view(request):
 
     return render(request, 'core/indicadores.html', {'indicadores': indicadores})
 
-
-
-def registro(request):
-    if request.method == 'POST':
-        form = RegistroForm(request.POST)
-        if form.is_valid():
-            try:
-                user = form.save()
-                login_aut(request, user)
-                messages.success(request, 'Registro exitoso. Bienvenido!')
-                logger.info(f"Usuario {user.username} registrado y autenticado exitosamente")
-                return redirect('index')
-            except Exception as e:
-                logger.error(f"Error al registrar el usuario: {e}")
-                form.add_error(None, 'Ocurrió un error al crear el usuario. Por favor, inténtelo de nuevo.')
-        else:
-            logger.warning(f"Formulario de registro no válido: {form.errors.as_json()}")
-    else:
-        form = RegistroForm()
-    return render(request, 'core/registro.html', {'form': form})
-
-#BUSCAR
-
-def buscar_productos(request):
-    query = request.GET.get('q', '')
-    productos = Producto.objects.all()
-
-    if query:
-        productos = productos.filter(
-            Q(nombre__icontains=query) |
-            Q(categoria__categoria__icontains=query) |
-            Q(descripcion__icontains=query)
-        )
-
-    ctx = {
-        'productos': productos,
-        'query': query
-    }
-    return render(request, 'core/tienda.html', ctx)
-
-#PERFIL
-
 @login_required
 def perfil(request):
     return render(request, 'core/perfil.html', {'user': request.user})
 
-#TRANSBANK
-
-
-# Agregar vistas para la integración de pagos con Transbank
+# Transbank
 def webpay_plus_commit(request):
     if request.method == 'GET':
         token = request.GET.get("token_ws")
@@ -360,3 +331,79 @@ def webpay_plus_create(request):
 
         response = Transaction().create(buy_order, session_id, amount, return_url)
         return render(request, 'core/create.html', {'response': response})
+
+@login_required
+@user_passes_test(grupo_contador)
+def vista_contador(request):
+    boletas = Boleta.objects.all()
+    if request.method == 'POST':
+        if 'generar_pdf' in request.POST:
+            return generar_pdf(request, boletas)
+        if 'limpiar' in request.POST:
+            limpiar_productos()
+            return redirect('vista_contador')
+    return render(request, 'core/vista_contador.html', {'boletas': boletas})
+
+def generar_pdf(request, boletas):
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = 'attachment; filename="reporte_compras.pdf"'
+
+    p = canvas.Canvas(response, pagesize=letter)
+    width, height = letter
+
+    p.setFont("Helvetica-Bold", 16)
+    p.drawString(100, height - 40, "Reporte de Compras")
+
+    y = height - 80
+    total_general = 0
+
+    for boleta in boletas:
+        p.setFont("Helvetica-Bold", 12)
+        p.drawString(100, y, f"Boleta ID: {boleta.id} - Fecha: {boleta.fecha.strftime('%Y-%m-%d %H:%M:%S')} - Total: ${boleta.total}")
+        y -= 20
+
+        detalles = DetalleBoleta.objects.filter(boleta=boleta)
+        for detalle in detalles:
+            p.setFont("Helvetica", 12)
+            p.drawString(120, y, f"Producto: {detalle.producto.nombre} - Cantidad: {detalle.cantidad} - Subtotal: ${detalle.subtotal}")
+            y -= 20
+        
+        total_general += boleta.total
+        y -= 20
+
+        if y < 100:
+            p.showPage()
+            p.setFont("Helvetica-Bold", 16)
+            p.drawString(100, height - 40, "Reporte de Compras (cont.)")
+            y = height - 80
+
+    p.setFont("Helvetica-Bold", 14)
+    p.drawString(100, y, f"Total General de Ventas: ${total_general}")
+
+    p.showPage()
+    p.save()
+    return response
+
+def limpiar_productos():
+    logger.info("Limpiando productos y boletas...")
+    DetalleBoleta.objects.all().delete()
+    Boleta.objects.all().delete()
+    Producto.objects.all().update(stock=0)  # Actualiza el stock de todos los productos a 0
+    logger.info("Productos y boletas limpiados correctamente.")
+
+def buscar_productos(request):
+    query = request.GET.get('q', '')
+    productos = Producto.objects.all()
+
+    if query:
+        productos = productos.filter(
+            Q(nombre__icontains=query) |
+            Q(categoria__categoria__icontains=query) |
+            Q(descripcion__icontains=query)
+        )
+
+    ctx = {
+        'productos': productos,
+        'query': query
+    }
+    return render(request, 'core/tienda.html', ctx)

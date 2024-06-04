@@ -11,8 +11,8 @@ urlpatterns = [
     path('tienda/', tienda, name="tienda"),
     path('cerrar_sesion/', cerrar_sesion, name="CERRAR_SESSION"),
     path('perfil/', perfil, name='perfil'),
-    path('bodeguero/', views.bodeguero_view, name='bodeguero'),
-
+    path('bodeguero/', bodeguero_view, name='bodeguero'),
+    path('vista_contador/', vista_contador, name='vista_contador'),
     # Carrito
     path('carrito/', carrito, name="carrito"),
     
@@ -39,6 +39,6 @@ urlpatterns = [
     path('status-form/', show_create, name='webpay_plus_status_form'),
     path('status/', status, name='webpay_plus_status'),
     path('generar_boleta/', generar_boleta, name='generar_boleta'),
-
+    path('generar_pdf/', generar_pdf, name='generar_pdf'),
     path('api/', include('core.api_url')),  # Añadido
 ]

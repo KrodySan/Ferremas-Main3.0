@@ -6,11 +6,11 @@ class RegistroForm(UserCreationForm):
     email = forms.EmailField(required=True)
     first_name = forms.CharField(max_length=30, required=True)
     last_name = forms.CharField(max_length=30, required=True)
-    perfil = forms.ChoiceField(choices=[('Bodeguero', 'Bodeguero')], required=True, label="Perfil")
+    user_type = forms.ChoiceField(choices=[('cliente', 'Cliente'), ('trabajador', 'Trabajador')], required=True)
 
     class Meta:
         model = User
-        fields = ['username', 'first_name', 'last_name', 'email', 'password1', 'password2', 'perfil']
+        fields = ['username', 'first_name', 'last_name', 'email', 'password1', 'password2', 'user_type']
 
     def save(self, commit=True):
         user = super().save(commit=False)
@@ -19,10 +19,6 @@ class RegistroForm(UserCreationForm):
         user.last_name = self.cleaned_data['last_name']
         if commit:
             user.save()
-            perfil = self.cleaned_data['perfil']
-            if perfil == 'Bodeguero':
-                grupo_bodeguero, created = Group.objects.get_or_create(name='Bodeguero')
-                user.groups.add(grupo_bodeguero)
         return user
     
 class LoginForm(forms.Form):
